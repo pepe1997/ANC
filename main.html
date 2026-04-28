@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Panel Principal</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<link rel="stylesheet" href="css/main.css">
+
+</head>
+
+<body>
+
+<header>
+  <div>📦 Sistema Logístico</div>
+  <div>
+    <span id="user"></span>
+    <button onclick="logout()">Salir</button>
+    <button onclick="actualizacionTotal()">🔄 Actualización Total</button>
+  </div>
+</header>
+
+<div class="container">
+
+  <div class="grid">
+    <div class="card" onclick="abrirAsignacion()">📊 Asignación</div>
+    <div class="card" onclick="abrirDashboard()">📈 Dashboard</div>
+    <div class="card" onclick="abrirBuscarPedido()">🔎 Buscar Pedido</div>
+    <div class="card" onclick="abrirInventario()">📦 Inventario</div>
+    <div class="card" onclick="abrirLpnsAntiguos()">⏳ LPNs Antiguos</div>
+    <div class="card">🧠 Validación</div>
+</div>
+
+  <!-- 🔥 AQUÍ SE CARGAN LOS MÓDULOS -->
+  <div id="modulo" style="margin-top:20px;"></div>
+
+</div>
+
+<script src="js/data.js"></script>
+<script src="js/main.js"></script>
+<script src="js/asignacion.js"></script>
+<script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+<script src="js/dashboard.js"></script>
+<script src="js/buscarPedido.js"></script>
+<script src="js/inventario.js"></script>
+<script src="js/lpnsAntiguos.js"></script>
+</body>
+</html>
