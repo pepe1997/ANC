@@ -258,26 +258,29 @@ function renderControl(){
 function renderUbicaciones(){
 
   let codigos = [...new Set(
-    dataLPN.map(x => String(x["CODIGO"] || "").trim()).filter(x=>x!=="")
+    dataLPN.map(x =>
+      limpiarCodigo(x["CODIGO"])
+    ).filter(x => x !== "")
   )];
 
-  let conUbi = 0;
-  let sinUbi = 0;
+  let conUbi = [];
+  let sinUbi = [];
 
   codigos.forEach(cod => {
 
     let existe = dataInventario.some(i =>
-      String(i["PRODUCTO"] || "").trim() === cod
+      limpiarCodigo(i["PRODUCTO"]) === cod
     );
 
-    if(existe) conUbi++;
-    else sinUbi++;
+    if(existe) conUbi.push(cod);
+    else sinUbi.push(cod);
+
   });
 
-  let total = conUbi + sinUbi;
+  let total = conUbi.length + sinUbi.length;
 
-  let pCon = porcentaje(conUbi,total);
-  let pSin = porcentaje(sinUbi,total);
+  let pCon = porcentaje(conUbi.length,total);
+  let pSin = porcentaje(sinUbi.length,total);
 
   let pie = `
     conic-gradient(
@@ -300,28 +303,33 @@ function renderUbicaciones(){
               <th>CANTIDAD</th>
               <th>%</th>
             </tr>
+
             <tr>
               <td>Con Ubicación</td>
-              <td>${conUbi}</td>
+              <td>${conUbi.length}</td>
               <td>${pCon}%</td>
             </tr>
+
             <tr>
               <td>Sin Ubicación</td>
-              <td>${sinUbi}</td>
+              <td>${sinUbi.length}</td>
               <td>${pSin}%</td>
             </tr>
           </table>
 
           <br>
 
-          <button class="btn-export" onclick="exportarSinUbicacion()">
+          <button class="btn-export"
+            onclick="exportarSinUbicacion()">
             ⬇ Exportar Sin Ubicación
           </button>
         </div>
 
         <div class="center">
           <h3>🥧 Cobertura</h3>
-          <div class="donut" style="background:${pie};"></div>
+          <div class="donut"
+            style="background:${pie};"></div>
+
           <p>🟢 ${pCon}% Con ubicación</p>
           <p>🔴 ${pSin}% Sin ubicación</p>
         </div>
@@ -329,6 +337,9 @@ function renderUbicaciones(){
       </div>
     </div>
   `;
+
+  // 🔥 AQUÍ ESTÁ LA CLAVE
+  window.sinUbicacionExport = [...sinUbi];
 
   document.getElementById("modulo").innerHTML = html;
 }
@@ -338,6 +349,11 @@ function renderUbicaciones(){
 function exportarSinUbicacion(){
 
   let codigos = window.sinUbicacionExport || [];
+
+  if(codigos.length === 0){
+    alert("No hay datos para exportar");
+    return;
+  }
 
   let html = `
     <table border="1">
@@ -350,14 +366,14 @@ function exportarSinUbicacion(){
   codigos.forEach(cod => {
 
     let fila = dataLPN.find(x =>
-      String(x["CODIGO"] || "").trim() === cod
+      limpiarCodigo(x["CODIGO"]) === limpiarCodigo(cod)
     );
 
-    let desc = fila ? fila["DESCRIPCION"] : "";
+    let desc = fila ? (fila["DESCRIPCION"] || "") : "";
 
     html += `
       <tr>
-        <td>${cod}</td>
+        <td style="mso-number-format:'\\@';">${cod}</td>
         <td>${desc}</td>
       </tr>
     `;
@@ -365,9 +381,10 @@ function exportarSinUbicacion(){
 
   html += "</table>";
 
-  let blob = new Blob([html], {
-    type:"application/vnd.ms-excel"
-  });
+  let blob = new Blob(
+    [html],
+    { type:"application/vnd.ms-excel" }
+  );
 
   let a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
