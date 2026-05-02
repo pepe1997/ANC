@@ -1,6 +1,55 @@
 let fechaSeleccionada = null;
 let vistaDashboard = "asignacion";
 
+function generarResumenGlobal(){
+
+  if(!Array.isArray(dataPedido) || dataPedido.length === 0){
+    return [];
+  }
+
+  const porFecha = {};
+
+  dataPedido.forEach(row => {
+
+    const fecha = String(row["FECHA_ORDEN"] || "").trim();
+    if(!fecha) return;
+
+    if(!porFecha[fecha]){
+      porFecha[fecha] = {
+        fecha: fecha,
+        solicitado: 0,
+        asignado: 0,
+        noasig: 0,
+        empacado: 0,
+        enviado: 0
+      };
+    }
+
+    const solicitado = numeroReal(row["BULTOS_REAL"]);
+    const asignado   = numeroReal(row["BULTOS_ASIGNADOS"]);
+    const noasig     = numeroReal(row["BULTOS_NO_ASIGNADO"]);
+
+    porFecha[fecha].solicitado += solicitado;
+    porFecha[fecha].asignado   += asignado;
+    porFecha[fecha].noasig     += noasig;
+
+    // 🔥 CALCULADOS (igual que tu dashboard)
+    porFecha[fecha].empacado += asignado;
+    porFecha[fecha].enviado  += numeroReal(row["BULTOS_ENVIADOS"] || 0);
+
+  });
+
+  let resumen = Object.values(porFecha);
+
+  resumen.sort((a,b)=>{
+    const pa = String(a.fecha).split("/").reverse().join("-");
+    const pb = String(b.fecha).split("/").reverse().join("-");
+    return new Date(pa) - new Date(pb);
+  });
+
+  return resumen;
+}
+
 // =============================
 // ABRIR DASHBOARD
 // =============================
@@ -27,8 +76,84 @@ function menuDashboard(){
       <button class="btn-export" onclick="vistaDashboard='control';abrirDashboard()">📍 Control</button>
       <button class="btn-export" onclick="vistaDashboard='ubicaciones';abrirDashboard()">🧭 Ubicaciones</button>
       <button class="btn-export" onclick="descargarImagen()">🖼 Imagen</button>
+      <button class="btn-export" onclick="reiniciarFiltro()">🔄 Reiniciar</button>
     </div>
   `;
+}
+
+// =============================
+// KPI NO ASIGNADO (NUEVO)
+// =============================
+function calcularDistribucionNoAsignado(){
+
+  let total = 0;
+  let reserva = 0;
+  let otras = 0;
+  let sinStock = 0;
+
+  dataPedido.forEach(p => {
+
+    let cod = String(p["PRODUCTO"] || "").trim();
+    let req = numeroReal(p["BULTOS_NO_ASIGNADO"] || 0);
+
+    if(req <= 0) return;
+
+    total += req;
+
+    let lpns = dataLPN.filter(l =>
+      String(l["CODIGO"] || "").trim() === cod
+    );
+
+    let utiles = lpns.filter(l => {
+
+      let estado = String(l["ESTADO"] || "").trim();
+      let ubi = String(l["UBICACION"] || "").trim();
+
+      let estadoOk =
+        estado === "Ubicado" ||
+        estado === "Recibido";
+
+      let ubiOk =
+        ubi.startsWith("Mass-") ||
+        ubi.startsWith("RAMPA") ||
+        ubi.startsWith("DROP-STOCK") ||
+        ubi.startsWith("DROP-BUFR") ||
+        ubi === "";
+
+      return estadoOk && ubiOk;
+    });
+
+    let reservaOk = utiles.some(l =>
+      String(l["UBICACION"] || "").startsWith("Mass-")
+    );
+
+    let otrasOk = utiles.some(l => {
+      let u = String(l["UBICACION"] || "").trim();
+      return (
+        u.startsWith("DROP-BUFR") ||
+        u.startsWith("RAMPA") ||
+        u.startsWith("DROP-STOCK") ||
+        u === ""
+      );
+    });
+
+    if(utiles.length === 0){
+      sinStock += req;
+    }
+    else if(reservaOk){
+      reserva += req;
+    }
+    else{
+      otras += req;
+    }
+
+  });
+
+  return {
+  total: numeroReal(total),
+  reserva: numeroReal(reserva),
+  otras: numeroReal(otras),
+  sinStock: numeroReal(sinStock)};
 }
 
 // =============================
@@ -36,113 +161,282 @@ function menuDashboard(){
 // =============================
 function renderAsignacion(){
 
+  procesarDatos();
+  let sinStockData = calcularSinStockData();
+
   let resumen = agruparDashboard();
+  let totalGlobal = {pedido:0, asignado:0, empacado:0, enviado:0, noasig:0};
 
-  let datosMostrar = fechaSeleccionada
-    ? resumen.filter(x => x.fecha === fechaSeleccionada)
-    : resumen;
-
-  let total = {
-    pedido:0, asignado:0, empacado:0, enviado:0, noasig:0
-  };
-
-  datosMostrar.forEach(r=>{
-    total.pedido += r.pedido;
-    total.asignado += r.asignado;
-    total.empacado += r.empacado;
-    total.enviado += r.enviado;
-    total.noasig += r.noasig;
+  resumen.forEach(r=>{
+    totalGlobal.pedido += r.pedido;
+    totalGlobal.asignado += r.asignado;
+    totalGlobal.empacado += r.empacado;
+    totalGlobal.enviado += r.enviado;
+    totalGlobal.noasig += r.noasig;
   });
 
-  let pAsig = total.noasig === 0 ? 100 : porcentaje(total.asignado,total.pedido);
+  let resumenFiltrado = resumen;
+  if(fechaSeleccionada){
+    let f = resumen.find(r => r.fecha === fechaSeleccionada);
+    if(f) resumenFiltrado = [f];
+  }
+  let total = {pedido:0, asignado:0, empacado:0, enviado:0, noasig:0};
+
+    resumenFiltrado.forEach(r=>{
+      total.pedido += r.pedido;
+      total.asignado += r.asignado;
+      total.empacado += r.empacado;
+      total.enviado += r.enviado;
+      total.noasig += r.noasig;
+    });
+
+  let pAsig = porcentaje(total.asignado,total.pedido);
   let pEmp  = porcentaje(total.empacado,total.pedido);
   let pEnv  = porcentaje(total.enviado,total.pedido);
 
-  let donut = `conic-gradient(
-    #22c55e 0% ${pAsig}%,
-    #ef4444 ${pAsig}% 100%
-  )`;
+  let dist = calcularDistribucionNoAsignado();
 
+    let reserva = dist.reserva;
+    let otras = dist.otras;
+    let sinStock = dist.sinStock;
+
+  // =============================
+  // HTML
+  // =============================
   let html = `
-    <div class="panel">
-      <h2>📈 Dashboard Pedidos</h2>
-      ${menuDashboard()}
+  <div class="panel">
 
-      <div class="kpi-grid">
+    <h2>📈 Dashboard</h2>
+    ${menuDashboard()}
 
-        <div class="kpi-card">
-          <div class="kpi-title">📦 Solicitado</div>
-          <div class="kpi-value">${formato(total.pedido)}</div>
-        </div>
+    <!-- KPIs -->
+    <div class="kpi-big-grid">
+      <div class="kpi-big"><span>📦 SOLICITADO</span><h1>${formatoDecimal(total.pedido)}</h1></div>
+      <div class="kpi-big"><span>🟢 ASIGNADO</span><h1>${formatoDecimal(total.asignado)}</h1></div>
+      <div class="kpi-big"><span>📦 EMPACADO</span><h1>${pEmp}%</h1></div>
+      <div class="kpi-big"><span>🚚 ENVIADO</span><h1>${pEnv}%</h1></div>
+      <div class="kpi-big"><span>🔴 NO ASIGNADO</span><h1>${formatoDecimal(total.noasig)}</h1></div>
+    </div>
 
-        <div class="kpi-card">
-          <div class="kpi-title">🟢 Asignado</div>
-          <div class="kpi-value">${pAsig}%</div>
-        </div>
+    <!-- TABLA + TENDENCIA + DONUT -->
+    <div class="dashboard-grid">
 
-        <div class="kpi-card">
-          <div class="kpi-title">📦 Empacado</div>
-          <div class="kpi-value">${pEmp}%</div>
-        </div>
-
-        <div class="kpi-card">
-          <div class="kpi-title">🚚 Enviado</div>
-          <div class="kpi-value">${pEnv}%</div>
-        </div>
-
-        <div class="kpi-card">
-          <div class="kpi-title">🔴 No Asignado</div>
-          <div class="kpi-value">${formato(total.noasig)}</div>
-        </div>
-
-      </div>
-
-      <div class="dashboard-grid">
-
-        <div>
-          <button class="btn-export" onclick="fechaSeleccionada=null;abrirDashboard()">🔄 Ver Todo</button>
-
-          <table>
-            <tr>
+      <!-- TABLA -->
+      <div>
+        <table>
+          <tr>
               <th>Fecha</th>
               <th>Solicitado</th>
               <th>Asignado</th>
               <th>Empacado</th>
               <th>Enviado</th>
+          </tr>
+          ${resumen.map(r=>`
+            <tr onclick="seleccionarFecha('${r.fecha}')" 
+              style="cursor:pointer; ${fechaSeleccionada===r.fecha ? 'background:#dbeafe;' : ''}">
+              <td>${r.fecha}</td>
+              <td>${formato(r.pedido)}</td>
+              <td>${formato(r.asignado)}</td>
+              <td>${formato(r.empacado)}</td>
+              <td>${formato(r.enviado)}</td>
             </tr>
-  `;
-
-  resumen.forEach(r=>{
-
-    let fondo = r.fecha === fechaSeleccionada ? "#bbf7d0" : "";
-
-    html += `
-      <tr style="cursor:pointer;background:${fondo}"
-          onclick="seleccionarFecha('${r.fecha}')">
-        <td>${r.fecha}</td>
-        <td>${formato(r.pedido)}</td>
-        <td>${formato(r.asignado)}</td>
-        <td>${formato(r.empacado)}</td>
-        <td>${formato(r.enviado)}</td>
-      </tr>
-    `;
-  });
-
-  html += `
-          </table>
-        </div>
-
-        <div class="center">
-          <h3>🎯 Asignación</h3>
-          <div class="donut" style="background:${donut};"></div>
-          <p>${pAsig}% asignado</p>
-        </div>
-
+          `).join("")}
+        </table>
       </div>
+
+      <!-- TENDENCIA -->
+      <div class="grafico-box">
+        <canvas id="graficoTendencia"></canvas>
+      </div>
+
+      <!-- DONUT -->
+      <div class="grafico-box">
+        <canvas id="graficoAsignacion"></canvas>
+      </div>
+
     </div>
+
+    <!-- DISTRIBUCIÓN -->
+    <h3 style="margin-top:25px;">📦 Distribución No Asignado</h3>
+
+    <div class="distribucion-grid">
+
+      <table class="tabla-mini">
+        <tr><th>TIPO</th><th>BULTOS</th></tr>
+        <tr><td>🟢 Reserva</td><td>${formato(reserva)}</td></tr>
+        <tr><td>🟡 Otras</td><td>${formato(otras)}</td></tr>
+        <tr><td>🔴 Sin Stock</td><td>${formato(sinStock)}</td></tr>
+      </table>
+
+      <div class="kpi-lateral">
+        <div class="kpi-side green">
+          <span>Reserva</span>
+          <h2>${porcentaje(reserva, totalGlobal.noasig)}%</h2>
+        </div>
+
+        <div class="kpi-side yellow">
+          <span>Ubicación en Piso</span>
+          <h2>${porcentaje(otras, totalGlobal.noasig)}%</h2>
+        </div>
+
+        <div class="kpi-side ${sinStock > 0 ? 'red' : 'green'}">
+          <span>Sin Stock</span>
+          <h2>${porcentaje(sinStock, totalGlobal.noasig)}%</h2>
+        </div>
+      </div>
+
+      <div class="grafico-box">
+        <canvas id="graficoDistribucion"></canvas>
+      </div>
+
+    </div>
+
+  </div>
   `;
 
   document.getElementById("modulo").innerHTML = html;
+
+  // =============================
+  // GRÁFICOS
+  // =============================
+  setTimeout(()=>{
+
+    // DONUT
+    new Chart(document.getElementById("graficoAsignacion"), {
+      type: 'doughnut',
+      data: {
+        labels: ["Asignado","No Asignado"],
+        datasets: [{
+          data: [total.asignado, total.noasig],
+          backgroundColor:["#22c55e","#ef4444"]
+        }]
+      },
+      options:{
+        plugins:{
+          legend:{position:"bottom"},
+          datalabels:{
+            formatter:(v,ctx)=>{
+              let data = ctx.chart.data.datasets[0].data;
+              let total = data.reduce((a,b)=>a+b,0);
+              let p = total ? ((v/total)*100) : 0;
+              return p < 0.01 && p > 0 ? "0.01%" : p.toFixed(2) + "%";
+            },
+            color:"#000",
+            backgroundColor:"#fff",
+            borderRadius:6,
+            padding:6,
+            font:{weight:'bold',size:11},
+            anchor:'center',
+            align:'center'
+          }
+        },
+        maintainAspectRatio:false
+      },
+      plugins:[ChartDataLabels]
+    });
+
+    // BARRAS
+    new Chart(document.getElementById("graficoDistribucion"), {
+      type: 'bar',
+      data: {
+        labels: ["Reserva","Otras","Sin Stock"],
+        datasets: [{
+          data: [reserva, otras, sinStock],
+          backgroundColor:["#22c55e","#f59e0b","#ef4444"]
+        }]
+      },
+      options:{
+        responsive:true,
+        maintainAspectRatio:false,
+
+        layout:{
+          padding:{
+            top:50
+          }
+        },
+
+        plugins:{
+          legend:{display:false},
+          datalabels:{
+            anchor:'end',
+            align:'top',
+            offset:8,
+
+            formatter:(v,ctx)=>{
+              let data = ctx.chart.data.datasets[0].data;
+              let total = data.reduce((a,b)=>a+b,0);
+              let p = total ? ((v/total)*100).toFixed(2) : 0;
+              return p + "%";
+            }
+          }
+        },
+
+        scales:{
+          y:{
+            beginAtZero:true,
+            suggestedMax: Math.max(reserva, otras, sinStock) * 1.25
+          }
+        }
+      },
+      plugins:[ChartDataLabels]
+    });
+
+    // TENDENCIA
+    // 🔥 tamaños dinámicos según selección
+    let puntosSize = resumen.map(r => 
+      r.fecha === fechaSeleccionada ? 6 : 2
+    );
+
+    new Chart(document.getElementById("graficoTendencia"), {
+      type: 'line',
+      data: {
+        labels: resumen.map(r=>{
+          let p = r.fecha.split("/");
+          let d = p[0];
+          let m = p[1];
+
+          const meses = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+
+          return d + " " + meses[parseInt(m)-1];
+        }),
+        datasets: [
+          {
+            label: 'Asignado',
+            data: resumen.map(r => r.asignado),
+            borderColor: '#22c55e',
+            tension: 0.4,
+
+            // 🔥 RESALTADO
+            pointRadius: puntosSize,
+            pointBackgroundColor: puntosSize.map(s => s === 6 ? '#22c55e' : '#fff'),
+            pointBorderWidth: puntosSize.map(s => s === 6 ? 3 : 1),
+            pointHoverRadius: 8
+          },
+          {
+            label: 'No Asignado',
+            data: resumen.map(r => r.noasig),
+            borderColor: '#ef4444',
+            tension: 0.4,
+
+            // 🔥 RESALTADO TAMBIÉN
+            pointRadius: puntosSize,
+            pointBackgroundColor: puntosSize.map(s => s === 6 ? '#ef4444' : '#fff'),
+            pointBorderWidth: puntosSize.map(s => s === 6 ? 3 : 1),
+            pointHoverRadius: 8
+          }
+        ]
+      },
+      options:{
+        responsive:true,
+        maintainAspectRatio:false,
+        plugins:{ legend:{position:'bottom'} },
+        scales:{ 
+          y:{beginAtZero:true} 
+        }
+      }
+    });
+
+  },200);
 }
 
 // =============================
@@ -184,20 +478,29 @@ function renderControl(){
   let pPal = porcentaje(pal,total);
   let pBuf = porcentaje(buf,total);
 
-  let pie = `
-    conic-gradient(
-      #22c55e 0% ${pPal}%,
-      #f59e0b ${pPal}% 100%
-    )
-  `;
-
+  // =============================
+  // HTML
+  // =============================
   let html = `
     <div class="panel">
       <h2>📍 Puntos de Control</h2>
       ${menuDashboard()}
 
+      <!-- 🔥 KPI RESUMEN -->
+      <div class="kpi-big-grid">
+        <div class="kpi-big">
+          <span>Paletero</span>
+          <h1>${Number(pPal).toFixed(2)}%</h1>
+        </div>
+        <div class="kpi-big">
+          <span>Buffer</span>
+          <h1 style="color:#f59e0b;">${Number(pBuf).toFixed(2)}%</h1>
+        </div>
+      </div>
+
       <div class="dashboard-grid">
 
+        <!-- TABLA -->
         <div>
           <table>
             <tr>
@@ -223,13 +526,13 @@ function renderControl(){
 
     html += `
       <tr>
-        <td>${z}</td>
+        <td><b>${z}</b></td>
         <td>${d0}</td>
         <td>${d1}</td>
         <td>${d23}</td>
         <td>${d46}</td>
-        <td style="color:red;font-weight:bold;">${d7}</td>
-        <td>${arr.length}</td>
+        <td style="color:#ef4444;font-weight:bold;">${d7}</td>
+        <td><b>${arr.length}</b></td>
       </tr>
     `;
   });
@@ -238,23 +541,76 @@ function renderControl(){
           </table>
         </div>
 
-        <div class="center">
-          <h3>🥧 Distribución</h3>
-          <div class="donut" style="background:${pie};"></div>
-          <p>🟢 ${pPal}% Paletero</p>
-          <p>🟠 ${pBuf}% Buffer</p>
+        <!-- GRAFICO -->
+        <div class="grafico-box">
+          <canvas id="graficoControl"></canvas>
         </div>
 
       </div>
     </div>
   `;
 
+  // =============================
+  // RENDER HTML
+  // =============================
   document.getElementById("modulo").innerHTML = html;
+
+  // =============================
+  // GRAFICO DONUT
+  // =============================
+  requestAnimationFrame(()=>{
+
+    let canvas = document.getElementById("graficoControl");
+    if(!canvas) return;
+
+    new Chart(canvas, {
+      type: 'doughnut',
+      data: {
+        labels: ["Paletero","Buffer"],
+        datasets: [{
+          data: [pal, buf],
+          backgroundColor:["#22c55e","#f59e0b"]
+        }]
+      },
+      options:{
+        cutout:'65%', // 🔥 más moderno
+        plugins:{
+          legend:{position:"bottom"},
+          tooltip:{
+            callbacks:{
+              label:(ctx)=>{
+                let v = ctx.raw;
+                let total = ctx.dataset.data.reduce((a,b)=>a+b,0);
+                let p = ((v/total)*100).toFixed(2);
+                return `${v} (${p}%)`;
+              }
+            }
+          },
+          datalabels:{
+            anchor:'center',
+            align:'center',
+            backgroundColor:'#000',
+            borderRadius:6,
+            padding:6,
+            formatter:(v,ctx)=>{
+              let data = ctx.chart.data.datasets[0].data;
+              let total = data.reduce((a,b)=>a+b,0);
+              let p = total ? ((v/total)*100).toFixed(2) : 0;
+              return p + "%";
+            },
+            color:'#fff',
+            font:{weight:'bold',size:11}
+          }
+        },
+        maintainAspectRatio:false
+      },
+      plugins:[ChartDataLabels]
+    });
+
+  });
+
 }
 
-// =============================
-// TAB 3 UBICACIONES
-// =============================
 function renderUbicaciones(){
 
   let codigos = [...new Set(
@@ -282,20 +638,73 @@ function renderUbicaciones(){
   let pCon = porcentaje(conUbi.length,total);
   let pSin = porcentaje(sinUbi.length,total);
 
-  let pie = `
-    conic-gradient(
-      #22c55e 0% ${pCon}%,
-      #ef4444 ${pCon}% 100%
-    )
-  `;
+  let colorSin = pSin > 10 ? "#ef4444" : "#22c55e";
 
+  // =============================
+  // 🔥 DETALLE AGRUPADO PRO MAX
+  // =============================
+  let agrupado = {};
+
+  dataLPN.forEach(x => {
+
+    let cod = limpiarCodigo(x["CODIGO"]);
+    if(!sinUbi.includes(cod)) return;
+
+    if(!agrupado[cod]){
+      agrupado[cod] = {
+        codigo: x["CODIGO"],
+        descripcion: x["DESCRIPCION"] || "",
+        ubicaciones: [],
+        bultos: 0
+      };
+    }
+
+    agrupado[cod].bultos += Number(x["BULTOS"] || 0);
+
+    agrupado[cod].ubicaciones.push({
+      lpn: x["LPN"] || "",
+      ubicacion: x["UBICACION"] || "-",
+      bultos: x["BULTOS"] || 0
+    });
+
+  });
+
+  let lista = Object.values(agrupado).sort((a,b)=> b.bultos - a.bultos);
+
+  let filasDetalle = lista.map(x => `
+    <tr onclick="verDetalleLPN('${x.codigo}')" style="cursor:pointer;">
+      <td>${x.codigo}</td>
+      <td>${x.descripcion}</td>
+      <td>${x.ubicaciones.length}</td>
+      <td style="color:${x.bultos > 50 ? '#ef4444' : '#111'}; font-weight:bold;">
+        ${formatoDecimal(x.bultos)}
+      </td>
+    </tr>
+  `).join("");
+
+  // =============================
+  // HTML
+  // =============================
   let html = `
     <div class="panel">
       <h2>🧭 Ubicaciones</h2>
       ${menuDashboard()}
 
+      <!-- KPI -->
+      <div class="kpi-big-grid">
+        <div class="kpi-big">
+          <span>Con Ubicación</span>
+          <h1>${Number(pCon).toFixed(2)}%</h1>
+        </div>
+        <div class="kpi-big">
+          <span>Sin Ubicación</span>
+          <h1 style="color:${colorSin};">${Number(pSin).toFixed(2)}%</h1>
+        </div>
+      </div>
+
       <div class="dashboard-grid">
 
+        <!-- RESUMEN -->
         <div>
           <table>
             <tr>
@@ -305,15 +714,19 @@ function renderUbicaciones(){
             </tr>
 
             <tr>
-              <td>Con Ubicación</td>
+              <td>🟢 Con Ubicación</td>
               <td>${conUbi.length}</td>
-              <td>${pCon}%</td>
+              <td><b>${Number(pCon).toFixed(2)}%</b></td>
             </tr>
 
             <tr>
-              <td>Sin Ubicación</td>
-              <td>${sinUbi.length}</td>
-              <td>${pSin}%</td>
+              <td>🔴 Sin Ubicación</td>
+              <td style="color:#ef4444;font-weight:bold;">
+                ${sinUbi.length}
+              </td>
+              <td style="color:${colorSin};font-weight:bold;">
+                ${Number(pSin).toFixed(2)}%
+              </td>
             </tr>
           </table>
 
@@ -323,25 +736,112 @@ function renderUbicaciones(){
             onclick="exportarSinUbicacion()">
             ⬇ Exportar Sin Ubicación
           </button>
+
+          <p style="margin-top:10px;font-size:13px;color:#64748b;">
+            Total productos: <b>${total}</b>
+          </p>
         </div>
 
-        <div class="center">
-          <h3>🥧 Cobertura</h3>
-          <div class="donut"
-            style="background:${pie};"></div>
-
-          <p>🟢 ${pCon}% Con ubicación</p>
-          <p>🔴 ${pSin}% Sin ubicación</p>
+        <!-- GRAFICO -->
+        <div class="grafico-box">
+          <canvas id="graficoUbicacion"></canvas>
         </div>
 
       </div>
+
+      <!-- 🔥 DETALLE PRO -->
+      <div style="margin-top:25px;">
+        <h3>📋 Detalle sin ubicación (${sinUbi.length})</h3>
+
+        <input 
+          type="text" 
+          id="buscadorDetalle"
+          placeholder="Buscar producto..."
+          style="width:100%;padding:8px;margin-bottom:10px;border-radius:8px;border:1px solid #ccc;"
+          onkeyup="filtrarDetalle()"
+        >
+
+        <div style="max-height:300px; overflow-y:auto;">
+          <table id="tablaDetalle">
+            <tr>
+              <th>PRODUCTO</th>
+              <th>DESCRIPCIÓN</th>
+              <th>LPNs</th>
+              <th>BULTOS</th>
+            </tr>
+
+            ${filasDetalle || `
+              <tr>
+                <td colspan="4" style="text-align:center;color:#64748b;">
+                  Sin registros
+                </td>
+              </tr>
+            `}
+          </table>
+        </div>
+      </div>
+
     </div>
   `;
 
-  // 🔥 AQUÍ ESTÁ LA CLAVE
+  document.getElementById("modulo").innerHTML = html;
+
   window.sinUbicacionExport = [...sinUbi];
 
-  document.getElementById("modulo").innerHTML = html;
+  // =============================
+  // GRAFICO
+  // =============================
+  requestAnimationFrame(()=>{
+
+    let canvas = document.getElementById("graficoUbicacion");
+    if(!canvas) return;
+
+    new Chart(canvas, {
+      type: 'doughnut',
+      data: {
+        labels: ["Con ubicación","Sin ubicación"],
+        datasets: [{
+          data: [conUbi.length, sinUbi.length],
+          backgroundColor:["#22c55e","#ef4444"]
+        }]
+      },
+      options:{
+        cutout:'65%',
+        plugins:{
+          legend:{position:"bottom"},
+          tooltip:{
+            callbacks:{
+              label:(ctx)=>{
+                let v = ctx.raw;
+                let total = ctx.dataset.data.reduce((a,b)=>a+b,0);
+                let p = ((v/total)*100).toFixed(2);
+                return `${v} (${p}%)`;
+              }
+            }
+          },
+          datalabels:{
+            anchor:'center',
+            align:'center',
+            backgroundColor:'#000',
+            borderRadius:6,
+            padding:6,
+            formatter:(v,ctx)=>{
+              let data = ctx.chart.data.datasets[0].data;
+              let total = data.reduce((a,b)=>a+b,0);
+              let p = total ? ((v/total)*100).toFixed(2) : 0;
+              return p + "%";
+            },
+            color:'#fff',
+            font:{weight:'bold',size:11}
+          }
+        },
+        maintainAspectRatio:false
+      },
+      plugins:[ChartDataLabels]
+    });
+
+  });
+
 }
 // =============================
 // EXPORTAR SIN UBICACION
@@ -391,10 +891,52 @@ function exportarSinUbicacion(){
   a.download = "sin_ubicacion.xls";
   a.click();
 }
+function filtrarDetalle(){
 
-// =============================
-// FUNCIONES BASE
-// =============================
+  let input = document.getElementById("buscadorDetalle").value.toLowerCase();
+  let filas = document.querySelectorAll("#tablaDetalle tr");
+
+  filas.forEach((fila,i)=>{
+    if(i === 0) return;
+    let texto = fila.innerText.toLowerCase();
+    fila.style.display = texto.includes(input) ? "" : "none";
+  });
+}
+
+function verDetalleLPN(codigo){
+
+  let detalle = dataLPN.filter(x =>
+    limpiarCodigo(x["CODIGO"]) === codigo
+  );
+
+  let html = `
+    <div class="panel">
+      <h2>📦 Detalle LPN - ${codigo}</h2>
+
+      <table>
+        <tr>
+          <th>LPN</th>
+          <th>UBICACIÓN</th>
+          <th>BULTOS</th>
+        </tr>
+
+        ${detalle.map(x => `
+          <tr>
+            <td>${x["LPN"]}</td>
+            <td>${x["UBICACION"] || "-"}</td>
+            <td>${formatoDecimal(x["BULTOS"])}</td>
+          </tr>
+        `).join("")}
+      </table>
+
+      <br>
+      <button onclick="renderUbicaciones()">⬅ Volver</button>
+    </div>
+  `;
+
+  document.getElementById("modulo").innerHTML = html;
+}
+
 function seleccionarFecha(fecha){
   fechaSeleccionada = fecha;
   abrirDashboard();
@@ -426,13 +968,22 @@ function agruparDashboard(){
 }
 
 function numero(v){
-  let n = parseFloat(v);
+  let txt = String(v || "").trim();
+  if(txt === "") return 0;
+  txt = txt.replace(",", ".");
+  let n = parseFloat(txt);
   return isNaN(n) ? 0 : n;
+}
+function formatoDecimal(v){
+  return Number(v).toLocaleString("es-PE", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2
+  });
 }
 
 function porcentaje(a,b){
-  if(b===0) return 0;
-  return Math.round((a/b)*100);
+  if(b===0) return "0.00";
+  return ((a/b)*100).toFixed(2);
 }
 
 function formato(n){
@@ -460,4 +1011,15 @@ function descargarImagen(){
     a.download = "dashboard.png";
     a.click();
   });
+}
+
+function reiniciarFiltro(){
+  fechaSeleccionada = null;
+  abrirDashboard();
+}
+function numeroReal(v){
+  if(v === null || v === undefined || v === "") return 0;
+
+  let n = Number(String(v).replace(",", "."));
+  return isNaN(n) ? 0 : n;
 }

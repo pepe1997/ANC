@@ -2,6 +2,26 @@
 const UBICACIONES_RESERVA = ["Mass-"];
 const UBICACIONES_OTRAS = ["DROP-BUFR", "RAMPA", "DROP-STOCK"];
 
+// 🔥 INDICE LPN (RENDIMIENTO)
+let mapaLPN = {};
+
+function construirMapaLPN(){
+
+  if(!Array.isArray(dataLPN) || dataLPN.length === 0){
+    return false; // 🔥 clave
+  }
+
+  mapaLPN = {};
+
+  dataLPN.forEach(l => {
+    let cod = limpiarCodigo(l["CODIGO"]);
+    if(!mapaLPN[cod]) mapaLPN[cod] = [];
+    mapaLPN[cod].push(l);
+  });
+
+  return true; // 🔥 confirmación
+}
+
 let estadoOperarios =
 JSON.parse(localStorage.getItem("estadoOperarios") || "{}");
 
@@ -26,19 +46,114 @@ function numeroReal(valor){
 // ===== ABRIR =====
 function abrirAsignacion(){
 
-  if(dataPedido.length === 0 || dataLPN.length === 0){
+  // 🔥 CONTROL DE CARGA
+  if(
+    !Array.isArray(dataPedido) || dataPedido.length === 0 ||
+    !Array.isArray(dataLPN)    || dataLPN.length === 0
+  ){
     document.getElementById("modulo").innerHTML = "⏳ Cargando datos...";
-    setTimeout(abrirAsignacion,1000);
+    setTimeout(abrirAsignacion, 500);
     return;
   }
 
+  if(!construirMapaLPN()){
+    document.getElementById("modulo").innerHTML = "⏳ Preparando ubicaciones...";
+    setTimeout(abrirAsignacion, 300);
+    return;
+  }
+
+  // =============================
+  // 🔥 KPI DESDE FUNCIÓN GLOBAL
+  // =============================
+  let resumen = generarResumenGlobal();
+
+  let ultima = resumen[resumen.length - 1] || {};
+
+  let ultimaFecha = ultima.fecha || "-";
+  let solicitado  = numeroReal(ultima.solicitado);
+  let asignado    = numeroReal(ultima.asignado);
+
+  let noAsignadoGlobal = resumen.reduce((a,b)=>
+    a + numeroReal(b.noasig)
+  ,0);
+
+  // =============================
+  // 🔥 PRODUCTOS
+  // =============================
+  procesarDatos();
+
+  const codigos = new Set();
+
+  (window.reservaData || []).forEach(r=>{
+    if(r.codigo) codigos.add(r.codigo);
+  });
+
+  (window.otrasData || []).forEach(o=>{
+    if(o.codigo) codigos.add(o.codigo);
+  });
+
+  (calcularSinStockData() || []).forEach(s=>{
+    if(s.codigo) codigos.add(s.codigo);
+  });
+
+  const productosUnicos = codigos.size;
+
+  // =============================
+  // 🔥 QUIEBRES
+  // =============================
+  const productos = obtenerPedido();
+  const quiebres = productos.filter(p => esQuiebre(p.codigo));
+
+  const alerta = quiebres.length > 0
+    ? `<div style="color:#ef4444;font-weight:bold;margin-bottom:10px;">
+         ⚠️ ${quiebres.length} productos en quiebre
+       </div>`
+    : "";
+
+  // =============================
+  // 🔥 RENDER
+  // =============================
   document.getElementById("modulo").innerHTML = `
     <h2>📊 Asignación Inteligente</h2>
+
+    ${alerta}
+
+    <div class="kpi-big-grid">
+
+      <div class="kpi-big">
+        <span>Fecha</span>
+        <h1>${ultimaFecha}</h1>
+      </div>
+
+      <div class="kpi-big">
+        <span>Solicitado</span>
+        <h1>${formatoDecimal(solicitado)}</h1>
+      </div>
+
+      <div class="kpi-big">
+        <span>Asignado</span>
+        <h1>${formatoDecimal(asignado)}</h1>
+      </div>
+
+      <div class="kpi-big">
+        <span>No Asignado (Global)</span>
+        <h1 style="color:#ef4444;">
+          ${formatoDecimal(noAsignadoGlobal)}
+        </h1>
+      </div>
+
+      <div class="kpi-big">
+        <span>Productos</span>
+        <h1>${productosUnicos}</h1>
+      </div>
+
+    </div>
 
     <div style="margin-bottom:15px;">
       <button class="btn-reserva" onclick="verReserva()">🟢 Reserva</button>
       <button class="btn-otras" onclick="verOtras()">🟡 Otras Ubicaciones</button>
       <button class="btn-stock" onclick="verSinStock()">🔴 Sin Stock</button>
+      <button onclick="resetOperarios()">🔄 Reiniciar</button>
     </div>
 
     <div id="contenido"></div>
@@ -114,9 +229,7 @@ function verSinStock(){
 
     let {codigo,desc,total} = p;
 
-    let lpns = dataLPN.filter(l =>
-      limpiarCodigo(l["CODIGO"]) === codigo
-    );
+    let lpns = mapaLPN[codigo] || [];
 
     let utiles = lpns.filter(l=>{
 
@@ -197,6 +310,48 @@ function verSinStock(){
 
   document.getElementById("contenido").innerHTML = html;
 }
+function calcularSinStockData(){
+
+  let pedido = obtenerPedido();
+  let resultado = [];
+
+  pedido.forEach(p=>{
+
+    let {codigo,desc,total} = p;
+
+    let lpns = mapaLPN[codigo] || [];
+
+    let utiles = lpns.filter(l=>{
+
+      let estado = String(l["ESTADO"] || "").trim();
+      let ubi = String(l["UBICACION"] || "").trim();
+
+      let estadoOk =
+        estado === "Ubicado" ||
+        estado === "Recibido";
+
+      let ubiOk =
+        ubi.startsWith("Mass-") ||
+        ubi.startsWith("RAMPA") ||
+        ubi.startsWith("DROP-STOCK") ||
+        ubi.startsWith("DROP-BUFR") ||
+        ubi === "";
+
+      return estadoOk && ubiOk;
+    });
+
+    if(utiles.length === 0){
+      resultado.push({
+        codigo,
+        desc,
+        bultos: total
+      });
+    }
+
+  });
+
+  return resultado;
+}
 
 // ===== PROCESAR =====
 function procesarDatos(){
@@ -215,9 +370,10 @@ function procesarDatos(){
 
     let {codigo,desc,total} = p;
 
-    let lpns = lpnValidos.filter(l =>
-      limpiarCodigo(l["CODIGO"]) === codigo
-    );
+    let lpns = (mapaLPN[codigo] || []).filter(l => {
+      let e = String(l["ESTADO"] || "").trim();
+      return e === "Ubicado" || e === "Recibido";
+    });
 
     let reserva = lpns.filter(l =>
       UBICACIONES_RESERVA.some(x =>
@@ -246,7 +402,7 @@ function procesarDatos(){
       )[0];
 
     if(mejor){
-      usados.push({...mejor,tomar:restante});
+      usados.push({...mejor,tomar:restante,highlight:true});
       restante = 0;
     }
 
@@ -458,6 +614,10 @@ function crearTablaReserva(data){
     let texto = "🔴 Pendiente";
     let color = "";
 
+    if(r.highlight){
+      color = "background:#fef9c3;font-weight:bold;";
+    }
+
     if(estado === "proceso"){
       texto = "🟡 En Proceso";
       color = "background:#fef9c3;";
@@ -481,8 +641,8 @@ function crearTablaReserva(data){
         <td>${quiebre ? "🔥 SI" : ""}</td>
         <td>${r.desc}</td>
         <td>${r.ubicacion}</td>
-        <td>${r.requerido}</td>
-        <td>${r.bultos}</td>
+        <td><b>${formatoDecimal(r.requerido)}</b></td>
+        <td>${formatoDecimal(r.bultos)}</td>
         <td>${texto}</td>
         <td>
           <button onclick="cambiarEstadoOperario('${key}')">
@@ -647,4 +807,11 @@ function descargarImagenId(id,nombre){
     a.click();
 
   });
+}
+function resetOperarios(){
+
+  localStorage.removeItem("estadoOperarios");
+  estadoOperarios = {};
+
+  verReserva();
 }
