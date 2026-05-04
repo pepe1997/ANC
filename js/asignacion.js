@@ -61,42 +61,30 @@ function abrirAsignacion(){
     setTimeout(abrirAsignacion, 300);
     return;
   }
+  procesarDatos();
 
   // =============================
   // 🔥 KPI DESDE FUNCIÓN GLOBAL
   // =============================
   let resumen = generarResumenGlobal();
-
   let ultima = resumen[resumen.length - 1] || {};
-
   let ultimaFecha = ultima.fecha || "-";
-  let solicitado  = numeroReal(ultima.solicitado);
+  let asignable = numeroReal(ultima.asignable);
   let asignado    = numeroReal(ultima.asignado);
-
+  let prog = calcularProgresoReal();
+  let progresoGlobal = prog.porcentaje.toFixed(1);
   let noAsignadoGlobal = resumen.reduce((a,b)=>
     a + numeroReal(b.noasig)
   ,0);
 
-  // =============================
-  // 🔥 PRODUCTOS
-  // =============================
-  procesarDatos();
-
-  const codigos = new Set();
+  const codigosReserva = new Set();
 
   (window.reservaData || []).forEach(r=>{
-    if(r.codigo) codigos.add(r.codigo);
+    if(r.codigo) codigosReserva.add(r.codigo);
   });
 
-  (window.otrasData || []).forEach(o=>{
-    if(o.codigo) codigos.add(o.codigo);
-  });
+  const productosReserva = codigosReserva.size;
 
-  (calcularSinStockData() || []).forEach(s=>{
-    if(s.codigo) codigos.add(s.codigo);
-  });
-
-  const productosUnicos = codigos.size;
 
   // =============================
   // 🔥 QUIEBRES
@@ -126,8 +114,8 @@ function abrirAsignacion(){
       </div>
 
       <div class="kpi-big">
-        <span>Solicitado</span>
-        <h1>${formatoDecimal(solicitado)}</h1>
+        <span>Asignable</span>
+        <h1>${formatoDecimal(asignable)}</h1>
       </div>
 
       <div class="kpi-big">
@@ -144,8 +132,14 @@ function abrirAsignacion(){
 
       <div class="kpi-big">
         <span>Productos</span>
-        <h1>${productosUnicos}</h1>
+        <h1>${productosReserva}</h1>
       </div>
+
+      <div class="kpi-big">
+      <span>Progreso</span>
+      <h1>${progresoGlobal}%</h1>
+      <small>${prog.productosCompletados} / ${prog.totalProductos}</small>
+    </div>
 
     </div>
 
@@ -590,7 +584,7 @@ function verOtras(){
 
 // ===== TABLA RESERVA =====
 function crearTablaReserva(data){
-
+  let progreso = calcularProgreso();
   let html = `
     <table>
       <tr>
@@ -602,6 +596,7 @@ function crearTablaReserva(data){
         <th>BULTOS_REQ</th>
         <th>BULTOS_LPN</th>
         <th>ESTADO</th>
+        <th>%</th>
         <th>ACCION</th>
       </tr>
   `;
@@ -613,6 +608,9 @@ function crearTablaReserva(data){
 
     let texto = "🔴 Pendiente";
     let color = "";
+
+    let p = progreso[r.codigo] || {};
+    let porcentaje = (p.porcentaje || 0).toFixed(0);
 
     if(r.highlight){
       color = "background:#fef9c3;font-weight:bold;";
@@ -644,7 +642,8 @@ function crearTablaReserva(data){
         <td><b>${formatoDecimal(r.requerido)}</b></td>
         <td>${formatoDecimal(r.bultos)}</td>
         <td>${texto}</td>
-        <td>
+        <td>${porcentaje}%</td>
+        <td> 
           <button onclick="cambiarEstadoOperario('${key}')">
             Cambiar
           </button>
@@ -681,6 +680,7 @@ function cambiarEstadoOperario(key){
   );
 
   verReserva();
+  actualizarProgresoUI(); // 🔥 NUEVO
 }
 
 // ===== EXPORTAR =====
@@ -810,8 +810,141 @@ function descargarImagenId(id,nombre){
 }
 function resetOperarios(){
 
+  if(!confirm("¿Reiniciar progreso?")) return;
+
   localStorage.removeItem("estadoOperarios");
   estadoOperarios = {};
 
-  verReserva();
+  // 🔥 Fuerza recalculo limpio
+  procesarDatos();
+
+  let prog = calcularProgresoReal();
+  console.log("Progreso después de reset:", prog);
+
+  // 🔥 Render completo (esto actualiza KPI a 0)
+  abrirAsignacion();
+}
+
+function calcularProgreso(){
+
+  let progresoPorProducto = {};
+
+  (window.reservaData || []).forEach(r=>{
+
+    let key = r.lpn + "_" + r.codigo;
+    let estado = estadoOperarios[key] || "pendiente";
+
+    if(!progresoPorProducto[r.codigo]){
+      progresoPorProducto[r.codigo] = {
+        requerido: r.requerido,
+        completado: 0
+      };
+    }
+
+    if(estado === "completo"){
+      progresoPorProducto[r.codigo].completado += numeroReal(r.bultos);
+    }
+
+  });
+
+  // calcular %
+  Object.values(progresoPorProducto).forEach(p=>{
+    p.porcentaje = p.requerido > 0
+      ? (p.completado / p.requerido) * 100
+      : 0;
+
+    if(p.porcentaje > 100) p.porcentaje = 100;
+  });
+
+  return progresoPorProducto;
+}
+
+function calcularProgresoGlobal(){
+
+  let data = calcularProgreso();
+
+  let totalReq = 0;
+  let totalComp = 0;
+
+  Object.values(data).forEach(p=>{
+    totalReq += p.requerido;
+    totalComp += p.completado;
+  });
+
+  let porcentaje = totalReq > 0
+    ? (totalComp / totalReq) * 100
+    : 0;
+
+  return porcentaje;
+}
+function calcularProgresoReal(){
+
+  let productos = {};
+
+  (window.reservaData || []).forEach(r => {
+
+    let key = r.lpn + "_" + r.codigo;
+    let estado = estadoOperarios[key] || "pendiente";
+
+    if(!productos[r.codigo]){
+      productos[r.codigo] = {
+        total: 0,
+        completos: 0
+      };
+    }
+
+    productos[r.codigo].total++;
+
+    if(estado === "completo"){
+      productos[r.codigo].completos++;
+    }
+
+  });
+
+  let totalProductos = 0;
+  let productosCompletados = 0;
+
+  Object.values(productos).forEach(p => {
+
+    totalProductos++;
+
+    // 🔥 SOLO cuenta como completo si TODOS sus LPN están completos
+    if(p.completos === p.total){
+      productosCompletados++;
+    }
+
+  });
+
+  let porcentaje = totalProductos > 0
+    ? (productosCompletados / totalProductos) * 100
+    : 0;
+
+  return {
+    porcentaje,
+    totalProductos,
+    productosCompletados
+  };
+}
+function cambiarEstadoOperario(key){
+
+  let actual = estadoOperarios[key] || "pendiente";
+  let nuevo = "pendiente";
+
+  if(actual === "pendiente")
+    nuevo = "proceso";
+  else if(actual === "proceso")
+    nuevo = "completo";
+  else
+    nuevo = "pendiente";
+
+  estadoOperarios[key] = nuevo;
+
+  localStorage.setItem(
+    "estadoOperarios",
+    JSON.stringify(estadoOperarios)
+  );
+
+  // 🔥 SOLUCIÓN
+  abrirAsignacion(); // recalcula KPIs
+  verReserva();      // vuelve a mostrar tabla
 }

@@ -18,6 +18,7 @@ function generarResumenGlobal(){
       porFecha[fecha] = {
         fecha: fecha,
         solicitado: 0,
+        asignable:0,
         asignado: 0,
         noasig: 0,
         empacado: 0,
@@ -26,15 +27,19 @@ function generarResumenGlobal(){
     }
 
     const solicitado = numeroReal(row["BULTOS_REAL"]);
+    const asignable = numeroReal(row["BULTOS_PEDIDO"]);
     const asignado   = numeroReal(row["BULTOS_ASIGNADOS"]);
+    const empacado = numeroReal(row["BULTOS_EMPACADOS"]);
     const noasig     = numeroReal(row["BULTOS_NO_ASIGNADO"]);
 
+
     porFecha[fecha].solicitado += solicitado;
+    porFecha[fecha].asignable += asignable;
     porFecha[fecha].asignado   += asignado;
     porFecha[fecha].noasig     += noasig;
 
     // 🔥 CALCULADOS (igual que tu dashboard)
-    porFecha[fecha].empacado += asignado;
+    porFecha[fecha].empacado += empacado;
     porFecha[fecha].enviado  += numeroReal(row["BULTOS_ENVIADOS"] || 0);
 
   });
@@ -163,12 +168,12 @@ function renderAsignacion(){
 
   procesarDatos();
   let sinStockData = calcularSinStockData();
-
   let resumen = agruparDashboard();
-  let totalGlobal = {pedido:0, asignado:0, empacado:0, enviado:0, noasig:0};
+  let totalGlobal = {pedido:0, asignable:0, asignado:0, empacado:0, enviado:0, noasig:0};
 
   resumen.forEach(r=>{
     totalGlobal.pedido += r.pedido;
+    totalGlobal.asignable += r.asignable;
     totalGlobal.asignado += r.asignado;
     totalGlobal.empacado += r.empacado;
     totalGlobal.enviado += r.enviado;
@@ -180,19 +185,20 @@ function renderAsignacion(){
     let f = resumen.find(r => r.fecha === fechaSeleccionada);
     if(f) resumenFiltrado = [f];
   }
-  let total = {pedido:0, asignado:0, empacado:0, enviado:0, noasig:0};
+  let total = {pedido:0, asignable:0, asignado:0, empacado:0, enviado:0, noasig:0};
 
     resumenFiltrado.forEach(r=>{
       total.pedido += r.pedido;
+      total.asignable +=r.asignable;
       total.asignado += r.asignado;
       total.empacado += r.empacado;
       total.enviado += r.enviado;
       total.noasig += r.noasig;
     });
 
-  let pAsig = porcentaje(total.asignado,total.pedido);
-  let pEmp  = porcentaje(total.empacado,total.pedido);
-  let pEnv  = porcentaje(total.enviado,total.pedido);
+  let pAsig = porcentaje(total.asignado,total.asignable);
+  let pEmp  = porcentaje(total.empacado,total.asignado);
+  let pEnv  = porcentaje(total.enviado,total.empacado);
 
   let dist = calcularDistribucionNoAsignado();
 
@@ -212,6 +218,7 @@ function renderAsignacion(){
     <!-- KPIs -->
     <div class="kpi-big-grid">
       <div class="kpi-big"><span>📦 SOLICITADO</span><h1>${formatoDecimal(total.pedido)}</h1></div>
+      <div class="kpi-big"><span>📦 ASIGNABLE</span><h1>${formatoDecimal(total.asignable)}</h1></div>
       <div class="kpi-big"><span>🟢 ASIGNADO</span><h1>${formatoDecimal(total.asignado)}</h1></div>
       <div class="kpi-big"><span>📦 EMPACADO</span><h1>${pEmp}%</h1></div>
       <div class="kpi-big"><span>🚚 ENVIADO</span><h1>${pEnv}%</h1></div>
@@ -227,6 +234,7 @@ function renderAsignacion(){
           <tr>
               <th>Fecha</th>
               <th>Solicitado</th>
+              <th>Asignable</th>
               <th>Asignado</th>
               <th>Empacado</th>
               <th>Enviado</th>
@@ -236,6 +244,7 @@ function renderAsignacion(){
               style="cursor:pointer; ${fechaSeleccionada===r.fecha ? 'background:#dbeafe;' : ''}">
               <td>${r.fecha}</td>
               <td>${formato(r.pedido)}</td>
+              <td>${formato(r.asignable)}</td>
               <td>${formato(r.asignado)}</td>
               <td>${formato(r.empacado)}</td>
               <td>${formato(r.enviado)}</td>
@@ -307,7 +316,7 @@ function renderAsignacion(){
       data: {
         labels: ["Asignado","No Asignado"],
         datasets: [{
-          data: [total.asignado, total.noasig],
+          data: [total.asignable, total.noasig],
           backgroundColor:["#22c55e","#ef4444"]
         }]
       },
@@ -953,11 +962,12 @@ function agruparDashboard(){
 
     if(!mapa[fecha]){
       mapa[fecha] = {
-        fecha,pedido:0,asignado:0,empacado:0,enviado:0,noasig:0
+        fecha,pedido:0,asignable:0,asignado:0,empacado:0,enviado:0,noasig:0
       };
     }
 
     mapa[fecha].pedido += numero(p["BULTOS_REAL"]);
+    mapa[fecha].asignable += numero(p["BULTOS_PEDIDO"] || 0);
     mapa[fecha].asignado += numero(p["BULTOS_ASIGNADOS"]);
     mapa[fecha].empacado += numero(p["BULTOS_EMPACADOS"]);
     mapa[fecha].enviado += numero(p["BULTOS_ENVIADOS"]);
