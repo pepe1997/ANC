@@ -7,6 +7,7 @@ let dataLPN = [];
 let dataInventario = [];
 let dataQuiebre = [];
 let dataProductos = [];
+let dataUbicaciones = [];
 let datosListos = false;
 
 // ===== CARGAR DATA =====
@@ -28,6 +29,9 @@ async function cargarDatos() {
 
     const resProd = await fetch(`https://opensheet.elk.sh/${SHEET_ID}/PRODUCTOS`);
     dataProductos = await resProd.json();
+
+    const resUbi = await fetch(`https://opensheet.elk.sh/${SHEET_ID}/UBICACION`);
+    dataUbicaciones = await resUbi.json();
 
     datosListos = true;
 

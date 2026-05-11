@@ -147,6 +147,7 @@ function abrirAsignacion(){
       <button class="btn-reserva" onclick="verReserva()">🟢 Reserva</button>
       <button class="btn-otras" onclick="verOtras()">🟡 Otras Ubicaciones</button>
       <button class="btn-stock" onclick="verSinStock()">🔴 Sin Stock</button>
+      <button onclick="exportarNoAsignados()">📦 Exportar No Asignados</button>
       <button onclick="resetOperarios()">🔄 Reiniciar</button>
     </div>
 
@@ -772,6 +773,127 @@ function descargarExcel(tipo){
   let a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
   a.download = tipo + ".xls";
+  a.click();
+}
+function exportarNoAsignados(){
+
+  procesarDatos();
+
+  let resultado = [];
+
+  let codigosAgregados = new Set();
+
+  // =========================================
+  // RESERVA
+  // =========================================
+  (window.reservaData || []).forEach(r=>{
+
+    if(codigosAgregados.has("RESERVA_" + r.codigo))
+      return;
+
+    codigosAgregados.add("RESERVA_" + r.codigo);
+
+    resultado.push({
+      tipo: "RESERVA",
+      codigo: r.codigo,
+      descripcion: r.desc,
+      bultos: r.requerido
+    });
+
+  });
+
+  // =========================================
+  // OTRAS UBICACIONES
+  // =========================================
+  (window.otrasData || []).forEach(o=>{
+
+    if(codigosAgregados.has("OTRAS_" + o.codigo))
+      return;
+
+    codigosAgregados.add("OTRAS_" + o.codigo);
+
+    resultado.push({
+      tipo: o.ubicacion || "PALETERO",
+      codigo: o.codigo,
+      descripcion: o.desc,
+      bultos: o.requerido
+    });
+
+  });
+
+  // =========================================
+  // SIN STOCK
+  // =========================================
+  let sinStock = calcularSinStockData();
+
+  sinStock.forEach(s=>{
+
+    if(codigosAgregados.has("SINSTOCK_" + s.codigo))
+      return;
+
+    codigosAgregados.add("SINSTOCK_" + s.codigo);
+
+    resultado.push({
+      tipo: "SIN STOCK",
+      codigo: s.codigo,
+      descripcion: s.desc,
+      bultos: s.bultos
+    });
+
+  });
+
+  // =========================================
+  // EXPORTAR
+  // =========================================
+  let html = `
+    <table border='1'>
+
+      <tr>
+        <th>UBICACION</th>
+        <th>CODIGO PRODUCTO</th>
+        <th>DESCRIPCION</th>
+        <th>BULTOS REQUERIDOS</th>
+      </tr>
+  `;
+
+  resultado.forEach(r=>{
+
+    html += `
+      <tr>
+
+        <td>
+          ${r.tipo}
+        </td>
+
+        <td style="mso-number-format:'\\@';">
+          ${r.codigo}
+        </td>
+
+        <td>
+          ${r.descripcion}
+        </td>
+
+        <td>
+          ${formatoDecimal(r.bultos)}
+        </td>
+
+      </tr>
+    `;
+  });
+
+  html += "</table>";
+
+  let blob = new Blob(
+    [html],
+    {type:"application/vnd.ms-excel"}
+  );
+
+  let a = document.createElement("a");
+
+  a.href = URL.createObjectURL(blob);
+
+  a.download = "NO_ASIGNADOS.xls";
+
   a.click();
 }
 
