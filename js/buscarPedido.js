@@ -34,6 +34,7 @@ function abrirBuscarPedido() {
 
       <div id="kpiBusqueda"></div>
       <div id="tablaBusqueda"></div>
+      <div id="modalLpn"></div>
     </div>
   `;
 
@@ -153,6 +154,7 @@ function filtrarBusqueda() {
         <th>STOCK</th>
         <th>ESTADO</th>
         <th>ACCION</th>
+        <th>VER</th>
       </tr>
   `;
 
@@ -204,6 +206,7 @@ function filtrarBusqueda() {
         <td>${format(stockActual)}</td>
         <td>${estado}</td>
         <td>${accion}</td>
+        <td><button onclick="verContenidoLpn('${r.lpn}')">👁</button></td>
       </tr>
     `;
   });
@@ -258,4 +261,146 @@ function reiniciarPendientes() {
 
     abrirBuscarPedido();
   }
+}
+// ======================================
+// 👁 VER CONTENIDO TOTAL LPN
+// ======================================
+function verContenidoLpn(lpn){
+
+  let filas = dataLPN.filter(x =>
+
+    String(x["LPN"] || "").trim()
+    ===
+    String(lpn || "").trim()
+  );
+
+  let html = `
+
+    <div style="
+      position:fixed;
+      inset:0;
+      background:rgba(0,0,0,0.4);
+      display:flex;
+      justify-content:center;
+      align-items:center;
+      z-index:99999;
+    ">
+
+      <div style="
+        background:white;
+        width:90%;
+        max-height:85vh;
+        overflow:auto;
+        border-radius:12px;
+        padding:20px;
+      ">
+
+        <div style="
+          display:flex;
+          justify-content:space-between;
+          align-items:center;
+          margin-bottom:15px;
+        ">
+
+          <h2>
+            📦 CONTENIDO LPN
+          </h2>
+
+          <button onclick="cerrarModalLpn()">
+            ❌
+          </button>
+
+        </div>
+
+        <div style="
+          margin-bottom:15px;
+          font-weight:bold;
+        ">
+
+          LPN:
+          ${lpn}
+
+        </div>
+
+        <table style="
+          width:100%;
+          border-collapse:collapse;
+        ">
+
+          <tr style="
+            position:sticky;
+            top:0;
+            background:white;
+            z-index:10;
+          ">
+
+            <th>LPN</th>
+
+            <th>CODIGO</th>
+
+            <th>DESCRIPCION</th>
+
+            <th>BULTOS</th>
+
+            <th>UBICACION</th>
+
+            <th>ESTADO</th>
+
+          </tr>
+  `;
+
+  filas.forEach(f => {
+
+    html += `
+
+      <tr>
+
+        <td>
+          ${f["LPN"] || ""}
+        </td>
+
+        <td>
+          ${f["CODIGO"] || ""}
+        </td>
+
+        <td>
+          ${f["DESCRIPCION"] || ""}
+        </td>
+
+        <td>
+          ${f["BULTOS"] || ""}
+        </td>
+
+        <td>
+          ${f["UBICACION"] || "PALETERO"}
+        </td>
+
+        <td>
+          ${f["ESTADO"] || ""}
+        </td>
+
+      </tr>
+    `;
+  });
+
+  html += `
+
+        </table>
+
+      </div>
+
+    </div>
+  `;
+
+  document.getElementById("modalLpn")
+    .innerHTML = html;
+}
+
+// ======================================
+// ❌ CERRAR MODAL
+// ======================================
+function cerrarModalLpn(){
+
+  document.getElementById("modalLpn")
+    .innerHTML = "";
 }

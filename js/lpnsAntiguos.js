@@ -3,6 +3,11 @@
 // ===============================
 
 // ===============================
+// 🌎 GLOBAL
+// ===============================
+let modoLpns = "UND";
+
+// ===============================
 // 💾 ESTADOS GUARDADOS
 // ===============================
 let estadosLpns = JSON.parse(
@@ -39,34 +44,76 @@ function reiniciarEstadosLpns(){
 }
 
 // ===============================
+// 🔘 CAMBIAR MODO
+// ===============================
+function cambiarModoLpns(modo){
+
+  modoLpns = modo;
+
+  filtrarLpnsAntiguos();
+}
+
+// ===============================
 function abrirLpnsAntiguos(){
 
   if(dataLPN.length === 0 || dataInventario.length === 0){
-    document.getElementById("modulo").innerHTML = "⏳ Cargando datos...";
+
+    document.getElementById("modulo").innerHTML =
+      "⏳ Cargando datos...";
+
     setTimeout(abrirLpnsAntiguos,500);
+
     return;
   }
 
   document.getElementById("modulo").innerHTML = `
+
     <div class="panel">
 
       <h2>⏳ LPNs Antiguos</h2>
 
       <div class="botones">
 
-        <input id="fLpn" placeholder="Buscar LPN" onkeyup="filtrarLpnsAntiguos()">
+        <input
+          id="fLpn"
+          placeholder="Buscar LPN"
+          onkeyup="filtrarLpnsAntiguos()"
+        >
 
-        <input id="fCod" placeholder="Código" onkeyup="filtrarLpnsAntiguos()">
+        <input
+          id="fCod"
+          placeholder="Código"
+          onkeyup="filtrarLpnsAntiguos()"
+        >
 
-        <input id="fDesc" placeholder="Descripción" onkeyup="filtrarLpnsAntiguos()">
+        <input
+          id="fDesc"
+          placeholder="Descripción"
+          onkeyup="filtrarLpnsAntiguos()"
+        >
 
-        <input id="fDias" type="number" value="7"
-          onchange="filtrarLpnsAntiguos()">
+        <input
+          id="fDias"
+          type="number"
+          value="0"
+          onchange="filtrarLpnsAntiguos()"
+        >
 
         <button onclick="setDias(3)">≥3</button>
+
         <button onclick="setDias(5)">≥5</button>
+
         <button onclick="setDias(7)">≥7</button>
+
         <button onclick="setDias(10)">≥10</button>
+
+        <button onclick="cambiarModoLpns('UND')">
+          UND
+        </button>
+
+        <button onclick="cambiarModoLpns('BUL')">
+          BUL
+        </button>
 
         <button onclick="reiniciarEstadosLpns()">
           🔄 Reiniciar Estados
@@ -87,7 +134,7 @@ function abrirLpnsAntiguos(){
 }
 
 // ===============================
-// 🔥 MAPA INVENTARIO (RENDIMIENTO)
+// 🔥 MAPA INVENTARIO
 // ===============================
 let mapaInventario = {};
 
@@ -95,11 +142,15 @@ function construirMapaInventario(){
 
   mapaInventario = {};
 
-  dataInventario.forEach(i=>{
+  dataInventario.forEach(i => {
 
-    let cod = String(i["PRODUCTO"] || "").trim();
+    let cod =
+      String(i["PRODUCTO"] || "").trim();
 
-    if(!mapaInventario[cod]) mapaInventario[cod] = [];
+    if(!mapaInventario[cod]){
+
+      mapaInventario[cod] = [];
+    }
 
     mapaInventario[cod].push(i);
   });
@@ -118,141 +169,269 @@ function setDias(n){
 // ===============================
 function filtrarLpnsAntiguos(){
 
-  let flpn  = document.getElementById("fLpn").value.toLowerCase();
+  let flpn =
+    document.getElementById("fLpn")
+    .value
+    .toLowerCase();
 
-  let fcod  = document.getElementById("fCod").value.toLowerCase();
+  let fcod =
+    document.getElementById("fCod")
+    .value
+    .toLowerCase();
 
-  let fdesc = document.getElementById("fDesc").value.toLowerCase();
+  let fdesc =
+    document.getElementById("fDesc")
+    .value
+    .toLowerCase();
 
-  let fdias = Number(document.getElementById("fDias").value || 0);
+  let fdias =
+    Number(
+      document.getElementById("fDias")
+      .value || 0
+    );
 
   let base = dataLPN.filter(x => {
 
-    let estado = String(x["ESTADO"] || "").trim();
+    let estado =
+      String(x["ESTADO"] || "").trim();
 
-    let ubi = String(x["UBICACION"] || "").trim();
+    let ubi =
+      String(x["UBICACION"] || "").trim();
 
     let validoEstado =
       estado === "Ubicado" ||
       estado === "Recibido";
 
-    // 🔥 SOLO PALETERO + BUFFER
     let validoUbi =
       ubi === "" ||
       ubi.startsWith("DROP-BUFR");
 
-    if(!validoEstado || !validoUbi) return false;
+    if(!validoEstado || !validoUbi){
+      return false;
+    }
 
-    let antig = Number(x["ANTIGUEDAD"] || 0);
+    let antig =
+      Number(x["ANTIGUEDAD"] || 0);
 
-    let lpn = String(x["LPN"] || "").toLowerCase();
+    let lpn =
+      String(x["LPN"] || "")
+      .toLowerCase();
 
-    let cod = String(x["CODIGO"] || "").toLowerCase();
+    let cod =
+      String(x["CODIGO"] || "")
+      .toLowerCase();
 
-    let des = String(x["DESCRIPCION"] || "").toLowerCase();
+    let des =
+      String(x["DESCRIPCION"] || "")
+      .toLowerCase();
 
     return (
+
       antig >= fdias &&
+
       lpn.includes(flpn) &&
+
       cod.includes(fcod) &&
+
       des.includes(fdesc)
     );
   });
 
-  // 🔥 ORDEN: MÁS ANTIGUOS PRIMERO
+  // ==================================
+  // 🔥 MÁS ANTIGUOS PRIMERO
+  // ==================================
   base.sort((a,b)=>
-    Number(b["ANTIGUEDAD"]||0) - Number(a["ANTIGUEDAD"]||0)
+
+    Number(b["ANTIGUEDAD"] || 0) -
+
+    Number(a["ANTIGUEDAD"] || 0)
   );
 
   let paletero = [];
 
   let buffer = [];
 
-  // ===============================
-  // 📊 KPIs NUEVOS
-  // ===============================
+  // ==================================
+  // 📊 KPIs
+  // ==================================
   let pendientes = 0;
+
   let revisando = 0;
+
   let hechos = 0;
 
+  // ==================================
+  // 🔥 RECORRER
+  // ==================================
   base.forEach(r => {
 
-    let codigo = String(r["CODIGO"] || "").trim();
+    let codigo =
+      String(r["CODIGO"] || "").trim();
 
-    let activos = mapaInventario[codigo] || [];
+    let activos =
+      mapaInventario[codigo] || [];
 
-    let ubicacionActiva = "SIN UBICACION ACTIVA";
+    let ubicacionesSet =
+      new Set();
 
-    let disponible = 0;
+    let disponibleUnd = 0;
 
-    if(activos.length > 0){
+    let disponibleBul = 0;
 
-      ubicacionActiva = activos
-        .map(x => x["UBICACION"])
-        .join(" / ");
+    // ==================================
+    // 🔥 CONSOLIDAR UBICACIONES
+    // ==================================
+    let mapaUbis = {};
 
-      disponible = activos.reduce((s,x)=>
-        s + Number(x["DISPONIBLE-BULTOS"] || 0),0
-      );
+    activos.forEach(x => {
+
+      let ubi =
+        String(x["UBICACION"] || "")
+        .trim();
+
+      if(!ubi) return;
+
+      ubicacionesSet.add(ubi);
+
+      let unact =
+        Number(x["UNACT"] || 0);
+
+      let uniMax =
+        Number(x["UNI_MAX"] || 0);
+
+      let uxb =
+        Number(x["UXB"] || 1);
+
+      if(!mapaUbis[ubi]){
+
+        mapaUbis[ubi] = {
+
+          unact:0,
+
+          uniMax,
+
+          uxb
+        };
+      }
+
+      mapaUbis[ubi].unact += unact;
+    });
+
+    // ==================================
+    // 🔥 DISPONIBLE REAL
+    // ==================================
+    Object.values(mapaUbis)
+    .forEach(u => {
+
+      let dispUnd =
+        Math.max(
+          0,
+          u.uniMax - u.unact
+        );
+
+      let dispBul =
+        Number(
+          (dispUnd / u.uxb)
+          .toFixed(2)
+        );
+
+      disponibleUnd += dispUnd;
+
+      disponibleBul += dispBul;
+    });
+
+    let ubicacionActiva =
+      Array.from(ubicacionesSet)
+      .sort(ordenarUbicacion)
+      .join(" / ");
+
+    if(!ubicacionActiva){
+
+      ubicacionActiva =
+        "SIN UBICACION ACTIVA";
     }
 
-    // ===============================
+    // ==================================
     // 🟢 ESTADO
-    // ===============================
+    // ==================================
     let estadoLpn =
-      estadosLpns[r["LPN"]] || "PENDIENTE";
+      estadosLpns[r["LPN"]] ||
+      "PENDIENTE";
 
-    // ===============================
+    // ==================================
     // 📊 CONTADORES KPI
-    // ===============================
-    if(estadoLpn === "PENDIENTE") pendientes++;
+    // ==================================
+    if(estadoLpn === "PENDIENTE"){
+      pendientes++;
+    }
 
-    if(estadoLpn === "REVISANDO") revisando++;
+    if(estadoLpn === "REVISANDO"){
+      revisando++;
+    }
 
-    if(estadoLpn === "HECHO") hechos++;
+    if(estadoLpn === "HECHO"){
+      hechos++;
+    }
 
     let fila = {
 
-      fecha: r["FECHA"],
+      fecha:
+        r["FECHA"],
 
-      antiguedad: Number(r["ANTIGUEDAD"] || 0),
+      antiguedad:
+        Number(r["ANTIGUEDAD"] || 0),
 
-      lpn: r["LPN"],
+      lpn:
+        r["LPN"],
 
       codigo,
 
-      desc: r["DESCRIPCION"],
+      desc:
+        r["DESCRIPCION"],
 
-      bultos: r["BULTOS"],
+      bultos:
+        r["BULTOS"],
 
-      ubicacion: r["UBICACION"] || "PALETERO",
+      ubicacion:
+        r["UBICACION"] || "PALETERO",
 
       ubicacionActiva,
 
-      disponible,
+      disponibleUnd,
+
+      disponibleBul,
 
       estadoLpn
     };
 
     if(r["UBICACION"] === ""){
+
       paletero.push(fila);
+
     } else {
+
       buffer.push(fila);
     }
 
   });
 
-  // ===============================
+  // ==================================
   // 📈 AVANCE
-  // ===============================
-  let avance = base.length > 0
-    ? ((hechos/base.length)*100).toFixed(1)
+  // ==================================
+  let avance =
+    base.length > 0
+
+    ? (
+      (hechos/base.length)*100
+    ).toFixed(1)
+
     : 0;
 
-  // ===============================
+  // ==================================
   // 📊 KPI
-  // ===============================
-  document.getElementById("kpiLpns").innerHTML = `
+  // ==================================
+  document.getElementById("kpiLpns")
+    .innerHTML = `
 
     <div style="
       display:flex;
@@ -299,12 +478,14 @@ function filtrarLpnsAntiguos(){
     </div>
   `;
 
-  // ===============================
+  // ==================================
   // 🧾 TABLAS
-  // ===============================
+  // ==================================
   let html = `
 
-    <h3>🔴 PALETERO (CRÍTICO)</h3>
+    <h3>
+      🔴 PALETERO (CRÍTICO)
+    </h3>
 
     ${crearTablaAntiguos(paletero)}
 
@@ -313,10 +494,10 @@ function filtrarLpnsAntiguos(){
     </h3>
 
     ${crearTablaAntiguos(buffer)}
-
   `;
 
-  document.getElementById("tablaAntiguos").innerHTML = html;
+  document.getElementById("tablaAntiguos")
+    .innerHTML = html;
 }
 
 // ===============================
@@ -325,13 +506,30 @@ function filtrarLpnsAntiguos(){
 function crearTablaAntiguos(data){
 
   if(data.length === 0){
+
     return "<p>Sin registros</p>";
   }
 
   let html = `
-    <table>
 
-      <tr>
+    <div style="
+      max-height:70vh;
+      overflow:auto;
+      border:1px solid #ddd;
+      border-radius:10px;
+    ">
+
+    <table style="
+      border-collapse:collapse;
+      width:100%;
+    ">
+
+      <tr style="
+        position:sticky;
+        top:0;
+        background:white;
+        z-index:100;
+      ">
 
         <th>ESTADO</th>
 
@@ -351,42 +549,63 @@ function crearTablaAntiguos(data){
 
         <th>UBICACION ACTIVA</th>
 
-        <th>DISPONIBLE</th>
+        <th>
+          ${
+            modoLpns === "UND"
+            ? "DISP UND"
+            : "DISP BUL"
+          }
+        </th>
 
       </tr>
   `;
 
   data.forEach(r => {
 
-    // ===============================
-    // 🎨 COLOR POR ESTADO
-    // ===============================
+    // ==================================
+    // 🎨 COLOR
+    // ==================================
     let color = "";
 
     if(r.estadoLpn === "HECHO"){
 
       color = "#d1fae5";
 
-    } else if(r.estadoLpn === "REVISANDO"){
+    } else if(
+      r.estadoLpn === "REVISANDO"
+    ){
 
       color = "#fef3c7";
 
     } else {
 
       color =
-        r.antiguedad > 15 ? "#fee2e2" :
-        r.antiguedad >= 10 ? "#fde68a" :
-        r.antiguedad >= 7 ? "#fef9c3" :
-        "#dcfce7";
+
+        r.antiguedad > 15
+        ? "#fee2e2"
+
+        : r.antiguedad >= 10
+        ? "#fde68a"
+
+        : r.antiguedad >= 7
+        ? "#fef9c3"
+
+        : "#dcfce7";
     }
 
     html += `
+
       <tr style="background:${color}">
 
         <td>
 
           <select
-            onchange="guardarEstadoLpn('${r.lpn}',this.value)"
+            onchange="
+              guardarEstadoLpn(
+                '${r.lpn}',
+                this.value
+              )
+            "
             style="
               padding:4px;
               border-radius:6px;
@@ -394,18 +613,36 @@ function crearTablaAntiguos(data){
             "
           >
 
-            <option value="PENDIENTE"
-              ${r.estadoLpn==="PENDIENTE"?"selected":""}>
+            <option
+              value="PENDIENTE"
+              ${
+                r.estadoLpn==="PENDIENTE"
+                ? "selected"
+                : ""
+              }
+            >
               🔴 Pendiente
             </option>
 
-            <option value="REVISANDO"
-              ${r.estadoLpn==="REVISANDO"?"selected":""}>
+            <option
+              value="REVISANDO"
+              ${
+                r.estadoLpn==="REVISANDO"
+                ? "selected"
+                : ""
+              }
+            >
               🟡 Revisando
             </option>
 
-            <option value="HECHO"
-              ${r.estadoLpn==="HECHO"?"selected":""}>
+            <option
+              value="HECHO"
+              ${
+                r.estadoLpn==="HECHO"
+                ? "selected"
+                : ""
+              }
+            >
               🟢 Hecho
             </option>
 
@@ -431,13 +668,30 @@ function crearTablaAntiguos(data){
 
         <td>${r.ubicacionActiva}</td>
 
-        <td>${r.disponible}</td>
+        <td>
+
+          <b>
+
+            ${
+              modoLpns === "UND"
+
+              ? r.disponibleUnd
+
+              : r.disponibleBul
+            }
+
+          </b>
+
+        </td>
 
       </tr>
     `;
   });
 
-  html += "</table>";
+  html += `
+    </table>
+    </div>
+  `;
 
   return html;
 }

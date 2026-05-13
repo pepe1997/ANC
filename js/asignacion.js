@@ -5,6 +5,8 @@ const UBICACIONES_OTRAS = ["DROP-BUFR", "RAMPA", "DROP-STOCK"];
 // 🔥 INDICE LPN (RENDIMIENTO)
 let mapaLPN = {};
 
+let cacheAsignacion = null;
+
 function construirMapaLPN(){
 
   if(!Array.isArray(dataLPN) || dataLPN.length === 0){
@@ -61,6 +63,7 @@ function abrirAsignacion(){
     setTimeout(abrirAsignacion, 300);
     return;
   }
+  cacheAsignacion = null;
   procesarDatos();
 
   // =============================
@@ -348,17 +351,26 @@ function calcularSinStockData(){
   return resultado;
 }
 
-// ===== PROCESAR =====
 function procesarDatos(){
+
+  // ======================================
+  // 🔥 CACHE
+  // ======================================
+  if(cacheAsignacion){
+
+    window.reservaData =
+      cacheAsignacion.reserva;
+
+    window.otrasData =
+      cacheAsignacion.otras;
+
+    return;
+  }
 
   let pedido = obtenerPedido();
 
-  let lpnValidos = dataLPN.filter(l=>{
-    let e = String(l["ESTADO"] || "").trim();
-    return e === "Ubicado" || e === "Recibido";
-  });
-
   let tablaReserva = [];
+
   let tablaOtras = [];
 
   pedido.forEach(p=>{
@@ -366,46 +378,96 @@ function procesarDatos(){
     let {codigo,desc,total} = p;
 
     let lpns = (mapaLPN[codigo] || []).filter(l => {
+
       let e = String(l["ESTADO"] || "").trim();
+
       return e === "Ubicado" || e === "Recibido";
     });
 
-    let reserva = lpns.filter(l =>
-      UBICACIONES_RESERVA.some(x =>
-        String(l["UBICACION"] || "").startsWith(x)
-      )
-    );
+    // ======================================
+    // 🔥 OPTIMIZADO
+    // ======================================
+    let reserva = [];
 
-    let otras = lpns.filter(l=>{
+    let otras = [];
 
-      let ubi = String(l["UBICACION"] || "").trim();
+    lpns.forEach(l => {
 
-      return (
-        UBICACIONES_OTRAS.some(x => ubi.startsWith(x)) ||
+      let ubi =
+        String(l["UBICACION"] || "")
+        .trim();
+
+      if(
+
+        UBICACIONES_RESERVA.some(x =>
+          ubi.startsWith(x)
+        )
+
+      ){
+
+        reserva.push(l);
+
+      } else if(
+
+        UBICACIONES_OTRAS.some(x =>
+          ubi.startsWith(x)
+        ) ||
+
         ubi === ""
-      );
+
+      ){
+
+        otras.push(l);
+      }
+
     });
 
     let restante = total;
+
     let usados = [];
 
-    // mejor ajuste
+    // ======================================
+    // 🔥 MEJOR AJUSTE
+    // ======================================
     let mejor = reserva
-      .filter(l => numeroReal(l["BULTOS"]) >= restante)
+
+      .filter(l =>
+        numeroReal(l["BULTOS"]) >= restante
+      )
+
       .sort((a,b)=>
-        numeroReal(a["BULTOS"]) - numeroReal(b["BULTOS"])
+
+        numeroReal(a["BULTOS"]) -
+
+        numeroReal(b["BULTOS"])
       )[0];
 
     if(mejor){
-      usados.push({...mejor,tomar:restante,highlight:true});
+
+      usados.push({
+
+        ...mejor,
+
+        tomar:restante,
+
+        highlight:true
+      });
+
       restante = 0;
     }
 
-    // acumular
+    // ======================================
+    // 🔥 ACUMULAR
+    // ======================================
     if(restante > 0){
 
-      let ordenados = [...reserva].sort((a,b)=>
-        numeroReal(b["BULTOS"]) - numeroReal(a["BULTOS"])
+      let ordenados = [...reserva]
+
+      .sort((a,b)=>
+
+        numeroReal(b["BULTOS"]) -
+
+        numeroReal(a["BULTOS"])
       );
 
       for(let r of ordenados){
@@ -413,58 +475,107 @@ function procesarDatos(){
         if(restante <= 0) break;
 
         let tomar = Math.min(
+
           restante,
+
           numeroReal(r["BULTOS"])
         );
 
-        usados.push({...r,tomar});
+        usados.push({
+
+          ...r,
+
+          tomar
+        });
+
         restante -= tomar;
       }
     }
 
     usados.forEach(u=>{
+
       tablaReserva.push({
+
         codigo,
+
         desc,
+
         lpn: u["LPN"],
+
         ubicacion: u["UBICACION"],
+
         requerido: total,
+
         bultos: u["BULTOS"]
       });
     });
 
+    // ======================================
+    // 🔥 OTRAS UBICACIONES
+    // ======================================
     if(restante > 0){
 
       let sugerido = otras
-        .filter(o => numeroReal(o["BULTOS"]) >= restante)
+
+        .filter(o =>
+          numeroReal(o["BULTOS"]) >= restante
+        )
+
         .sort((a,b)=>
-          numeroReal(a["BULTOS"]) - numeroReal(b["BULTOS"])
+
+          numeroReal(a["BULTOS"]) -
+
+          numeroReal(b["BULTOS"])
         )[0];
 
       otras.forEach(o=>{
+
         tablaOtras.push({
+
           codigo,
+
           desc,
+
           lpn: o["LPN"],
+
           ubicacion: o["UBICACION"],
+
           requerido: restante,
+
           bultos: o["BULTOS"],
+
           highlight:
+
             sugerido &&
+
             o["LPN"] === sugerido["LPN"]
         });
+
       });
     }
 
   });
 
-  window.reservaData = tablaReserva.sort(ordenarReserva);
-  window.otrasData = tablaOtras;
+  window.reservaData =
+    tablaReserva.sort(ordenarReserva);
+
+  window.otrasData =
+    tablaOtras;
+
+  // ======================================
+  // 🔥 GUARDAR CACHE
+  // ======================================
+  cacheAsignacion = {
+
+    reserva: window.reservaData,
+
+    otras: window.otrasData
+  };
 }
 // ===== VER RESERVA =====
 function verReserva(){
 
-  procesarDatos();
+
 
   let completos =
     window.reservaData.filter(r => r.requerido >= 30);
@@ -529,7 +640,7 @@ function verReserva(){
 // ===== VER OTRAS =====
 function verOtras(){
 
-  procesarDatos();
+
 
   let html = `
     <h3>🟡 OTRAS UBICACIONES</h3>
