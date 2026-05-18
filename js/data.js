@@ -8,36 +8,40 @@ let dataInventario = [];
 let dataQuiebre = [];
 let dataProductos = [];
 let dataUbicaciones = [];
+let dataBloqueo = [];
 let datosListos = false;
 
 // ===== CARGAR DATA =====
+async function cargarHoja(nombre) {
+  const res = await fetch(`https://opensheet.elk.sh/${SHEET_ID}/${nombre}`);
+  if(!res.ok) throw new Error(`No se pudo cargar ${nombre}`);
+  return await res.json();
+}
+
 async function cargarDatos() {
 
   try {
 
-    const resPedido = await fetch(`https://opensheet.elk.sh/${SHEET_ID}/PEDIDO`);
-    dataPedido = await resPedido.json();
+    dataPedido = await cargarHoja("PEDIDO");
+    dataLPN = await cargarHoja("LPNS");
+    dataInventario = await cargarHoja("INV_ACTIVO");
+    dataQuiebre = await cargarHoja("QUIEBRES");
+    dataProductos = await cargarHoja("PRODUCTOS");
+    dataUbicaciones = await cargarHoja("UBICACION");
 
-    const resLPN = await fetch(`https://opensheet.elk.sh/${SHEET_ID}/LPNS`);
-    dataLPN = await resLPN.json();
-
-    const resInv = await fetch(`https://opensheet.elk.sh/${SHEET_ID}/INV_ACTIVO`);
-    dataInventario = await resInv.json();
-
-    const resQui = await fetch(`https://opensheet.elk.sh/${SHEET_ID}/QUIEBRES`);
-    dataQuiebre = await resQui.json();
-
-    const resProd = await fetch(`https://opensheet.elk.sh/${SHEET_ID}/PRODUCTOS`);
-    dataProductos = await resProd.json();
-
-    const resUbi = await fetch(`https://opensheet.elk.sh/${SHEET_ID}/UBICACION`);
-    dataUbicaciones = await resUbi.json();
+    try {
+      dataBloqueo = await cargarHoja("BLOQUEO");
+    } catch (errorBloqueo) {
+      dataBloqueo = [];
+      console.warn("No se pudo cargar BLOQUEO:", errorBloqueo);
+    }
 
     datosListos = true;
 
     console.log("✅ Datos cargados");
     console.log("PEDIDO:", dataPedido.length);
     console.log("LPN:", dataLPN.length);
+    console.log("BLOQUEO:", dataBloqueo.length);
 
   } catch (error) {
     console.error("❌ Error cargando datos:", error);

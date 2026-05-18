@@ -28,6 +28,3 @@ function esQuiebre(codigo){
     String(x["CODIGO"] || "").trim() === String(codigo).trim()
   );
 }
-
-
-cargarDatos();

@@ -12,26 +12,26 @@
 <body>
 
 <header>
-  <div>📦 Sistema Logístico</div>
+  <div>Sistema Logistico</div>
   <div>
     <span id="user"></span>
     <button onclick="logout()">Salir</button>
-    <button onclick="actualizacionTotal()">🔄 Actualización Total</button>
+    <button onclick="actualizacionTotal()">Actualizacion Total</button>
   </div>
 </header>
 
 <div class="container">
 
   <div class="grid">
-    <div class="card" onclick="abrirAsignacion()">📊 Asignación</div>
-    <div class="card" onclick="abrirDashboard()">📈 Dashboard</div>
-    <div class="card" onclick="abrirBuscarPedido()">🔎 Buscar Pedido</div>
-    <div class="card" onclick="abrirInventario()">📦 Inventario</div>
-    <div class="card" onclick="abrirLpnsAntiguos()">⏳ LPNs Antiguos</div>
-    <div class="card" onclick="">🧠 Validación</div>
-</div>
+    <div class="card" onclick="abrirAsignacion()">Asignacion</div>
+    <div class="card" onclick="abrirDashboard()">Dashboard</div>
+    <div class="card" onclick="abrirBuscarPedido()">Buscar Pedido</div>
+    <div class="card" onclick="abrirInventario()">Inventario</div>
+    <div class="card" onclick="abrirLpnsAntiguos()">LPNs Antiguos</div>
+    <div class="card" onclick="abrirBloqueados()">Bloqueados</div>
+    <div class="card" onclick="abrirSlottingInteligente()">Validacion</div>
+  </div>
 
-  <!-- 🔥 AQUÍ SE CARGAN LOS MÓDULOS -->
   <div id="modulo" style="margin-top:20px;"></div>
 
 </div>
@@ -44,6 +44,7 @@
 <script src="js/buscarPedido.js"></script>
 <script src="js/inventario.js"></script>
 <script src="js/lpnsAntiguos.js"></script>
+<script src="js/bloqueados.js"></script>
 <script src="js/validacion.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
